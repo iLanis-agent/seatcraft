@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SeatCraft - app</title>
+<style>
+  :root { --bg:#0c1416; --card:#132024; --card2:#0f1a1d; --line:#1e3237; --ink:#e8f4f2; --dim:#8fb3ad; --teal:#5eead4; --amber:#fbbf24; --red:#fca5a5; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width:760px; margin:0 auto; padding:28px 20px 64px; }
+  header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:22px; }
+  header h1 { font-size:26px; margin:0; }
+  header h1 span { color:var(--teal); }
+  header a { color:var(--dim); text-decoration:none; font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px; margin:0 0 18px; }
+  .card h2 { margin:0 0 14px; font-size:18px; }
+  label { display:block; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--dim); margin:0 0 6px; }
+  input, textarea { width:100%; background:var(--card2); border:1px solid var(--line); color:var(--ink); border-radius:10px; padding:10px 12px; font-size:15px; font-family:inherit; }
+  textarea { min-height:110px; resize:vertical; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  button { background:var(--teal); color:#06231e; border:0; font-weight:700; border-radius:10px; padding:11px 22px; font-size:16px; cursor:pointer; }
+  .hint { color:var(--dim); font-size:13px; margin-top:8px; }
+  .summary { background:var(--card2); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; color:var(--teal); font-weight:600; }
+  .tables { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .tbl { background:var(--card2); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .tbl h3 { margin:0 0 8px; font-size:15px; color:var(--ink); }
+  .tbl ul { margin:0; padding:0; list-style:none; }
+  .tbl li { display:flex; justify-content:space-between; padding:4px 0; border-top:1px solid var(--line); font-size:15px; }
+  .tbl li span.tag { color:var(--dim); font-size:13px; }
+  .viol { color:var(--red); font-size:14px; margin-top:12px; }
+  .unseated { color:var(--amber); font-size:14px; margin-top:12px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Seat<span>Craft</span></h1>
+    <a href="index.html">&larr; Home</a>
+  </header>
+
+  <div class="card">
+    <h2>Guests</h2>
+    <label for="f-guests">One per line: Name, group tag</label>
+    <textarea id="f-guests">Maya, family
+Eitan, family
+Noa, family
+Dana, college
+Tom, college
+Lior, college
+Sara, work
+John, work
+Ruth, family
+Omer, college
+Kai, work
+Alma, family</textarea>
+    <p class="hint">Tag groups the solver should try to keep together - family, college, work, kids.</p>
+  </div>
+
+  <div class="card">
+    <h2>Room and rules</h2>
+    <div class="row">
+      <div><label for="f-tables">Tables</label><input id="f-tables" type="number" min="1" max="40" value="3"></div>
+      <div><label for="f-seats">Seats per table</label><input id="f-seats" type="number" min="2" max="30" value="4"></div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="f-avoid">Keep apart (A &lt;&gt; B per line)</label>
+        <textarea id="f-avoid">Ruth <> Omer</textarea>
+      </div>
+      <div>
+        <label for="f-with">Must sit together (A = B per line)</label>
+        <textarea id="f-with">Maya = Eitan
+Dana = Tom</textarea>
+      </div>
+    </div>
+    <button id="f-solve">Solve the chart</button>
+  </div>
+
+  <div class="card hidden" id="result">
+    <h2>Your chart</h2>
+    <div class="summary" id="sumline"></div>
+    <div class="tables" id="tables"></div>
+    <p class="viol" id="viol"></p>
+    <p class="unseated" id="unseated"></p>
+  </div>
+</div>
+<script src="engine.js"></script>
+<script>
+(function () {
+  'use strict';
+  var KEY = 'seatcraft-data';
+  var $ = function (id) { return document.getElementById(id); };
+
+  function save() {
+    localStorage.setItem(KEY, JSON.stringify({
+      guests: $('f-guests').value, tables: $('f-tables').value, seats: $('f-seats').value,
+      avoid: $('f-avoid').value, with: $('f-with').value
+    }));
+  }
+
+  function solve() {
+    var guests = SeatEngine.parseGuests($('f-guests').value);
+    var nt = Math.max(1, Math.min(40, +$('f-tables').value || 1));
+    var cap = Math.max(2, Math.min(30, +$('f-seats').value || 8));
+    var tables = [];
+    for (var i = 0; i < nt; i++) tables.push({ name: 'Table ' + (i + 1), capacity: cap });
+    var avoid = SeatEngine.parsePairs($('f-avoid').value, ' <> ');
+    var withP = SeatEngine.parsePairs($('f-with').value, ' = ');
+    var seating = SeatEngine.seat(guests, tables, avoid, withP);
+    var sum = SeatEngine.summary(guests, tables, seating);
+    var viol = SeatEngine.violations(guests, tables, avoid, withP, seating);
+
+    $('result').classList.remove('hidden');
+    $('sumline').textContent = guests.length + ' guests - ' + sum.tablesUsed + ' tables used, ' + sum.emptySeats + ' seats free' + (sum.unseated.length ? ', ' + sum.unseated.length + ' unseated' : '') + '.';
+    var box = $('tables'); box.innerHTML = '';
+    tables.forEach(function (t, ti) {
+      var members = guests.filter(function (_, gi) { return seating[gi] === ti; });
+      if (!members.length) return;
+      var div = document.createElement('div');
+      div.className = 'tbl';
+      var h = document.createElement('h3');
+      h.textContent = t.name + ' (' + members.length + '/' + t.capacity + ')';
+      div.appendChild(h);
+      var ul = document.createElement('ul');
+      members.forEach(function (m) {
+        var li = document.createElement('li');
+        var nm = document.createElement('span'); nm.textContent = m.name;
+        var tg = document.createElement('span'); tg.className = 'tag'; tg.textContent = m.tag;
+        li.appendChild(nm); li.appendChild(tg); ul.appendChild(li);
+      });
+      div.appendChild(ul); box.appendChild(div);
+    });
+    $('viol').textContent = viol.length
+      ? viol.map(function (v) { return v.type === 'avoid' ? 'Keep-apart broken: ' + v.a + ' and ' + v.b + ' share a table.' : 'Together broken: ' + v.a + ' and ' + v.b + ' are apart.'; }).join(' ')
+      : '';
+    $('unseated').textContent = sum.unseated.length ? 'No seat for: ' + sum.unseated.join(', ') + '.' : '';
+    save();
+  }
+
+  $('f-solve').addEventListener('click', solve);
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY));
+    if (saved) {
+      $('f-guests').value = saved.guests; $('f-tables').value = saved.tables;
+      $('f-seats').value = saved.seats; $('f-avoid').value = saved.avoid; $('f-with').value = saved.with;
+      solve();
+    }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
